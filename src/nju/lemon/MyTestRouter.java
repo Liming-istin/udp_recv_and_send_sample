@@ -32,6 +32,7 @@ public class MyTestRouter {
         this.senderPort = port;
         this.selfId = id;
         this.maxId = maxId;
+        sendQueues = new ArrayList<>(3);
         sendQueues.add(new LinkedList<MyPacket>());
         sendQueues.add(new LinkedList<MyPacket>());
         sendQueues.add(new LinkedList<MyPacket>());
@@ -50,8 +51,11 @@ public class MyTestRouter {
             LinkedList<MyPacket> queue = sendQueues.get(priority);
             if (queue.contains(packet)) {
                 int index = queue.indexOf(packet);
-                queue.remove(packet);
-                queue.add(index, packet);
+                MyPacket packetInQueue = queue.get(index);
+                if(packet.isNewerThan(packetInQueue)) {
+                    queue.remove(packetInQueue);
+                    queue.add(index, packet);
+                }
             } else {
                 if (packet.getSrcId() != this.selfId) {
                     queue.add(packet);
@@ -159,6 +163,9 @@ public class MyTestRouter {
         timer.schedule(sendTask, delay, period);
     }
 
-
+    void stop() {
+        if(timer != null)
+            timer.cancel();
+    }
 
 }

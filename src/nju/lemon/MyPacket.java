@@ -55,6 +55,22 @@ public class MyPacket implements Serializable {
         return hash;
     }
 
+    /**
+     * Decide which packet is the newer one if message is null
+     * @param other
+     * @return true  this is newer
+     *         false other is newer
+     */
+    public boolean isNewerThan(MyPacket other) {
+        if(other == null) return false;
+        if(this.message == null && other.message == null) {
+            if(this.equals(other)) {
+                return this.time > other.time;
+            }
+        }
+        return false;
+    }
+
     @Override
     public boolean equals(Object obj) {
         if (obj == this) return true;

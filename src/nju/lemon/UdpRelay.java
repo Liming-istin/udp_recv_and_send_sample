@@ -45,6 +45,7 @@ public class UdpRelay {
             receiveSocket = new DatagramSocket(receivePort, receiveIp);
         } catch (SocketException e) {
             e.printStackTrace();
+            System.exit(1);
         }
         receiveWorker = new Runnable() {
             @Override
@@ -143,6 +144,9 @@ public class UdpRelay {
             receiveThread.interrupt();
             sendSocket.close();
             receiveSocket.close();
+            if(router != null) {
+                router.stop();
+            }
         } catch (Exception e) {
             //Now do Nothing
             e.printStackTrace();
