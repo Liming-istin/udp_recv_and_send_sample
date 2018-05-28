@@ -45,6 +45,7 @@ public class MyPacket implements Serializable {
         if (message == null) {
             //No message, send the newest location info
             hash = srcId + 31 * hash;
+//            hash = (int) time + 31 * hash;
         } else {
             //Have message, packet specified by src, dest, time and message;
             hash = srcId + 31 * hash;
@@ -53,6 +54,10 @@ public class MyPacket implements Serializable {
             hash = message.hashCode() + hash;
         }
         return hash;
+    }
+
+    public boolean isNullMessage() {
+        return this.message == null;
     }
 
     /**
@@ -67,6 +72,16 @@ public class MyPacket implements Serializable {
             if(this.equals(other)) {
                 return this.time > other.time;
             }
+        }
+        return false;
+    }
+
+    public boolean totallyEquals(MyPacket packet) {
+        if(packet.isNullMessage() && this.isNullMessage()) {
+            return packet.srcId == this.srcId &&
+                    packet.time == this.time &&
+                    packet.location.latitude == this.location.latitude &&
+                    packet.location.longitude == this.location.longitude;
         }
         return false;
     }

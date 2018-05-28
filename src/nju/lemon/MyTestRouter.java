@@ -15,6 +15,8 @@ public class MyTestRouter {
     private static final int WORKING_PERIOD = 5;
     private ArrayList<LinkedList> sendQueues;
     private LinkedList<MyPacket> broadCastPackets;
+    private HashMap<MyPacket, Long> receivedPackets;
+    private LinkedList<MyPacket> locationPackets;
 
     private int selfId;
     private int maxId;
@@ -26,7 +28,7 @@ public class MyTestRouter {
 
     private final Object lockObj = new Object();
 
-    public MyTestRouter(DatagramSocket socket, InetAddress senderIp, int port, int id, int maxId) {
+    MyTestRouter(DatagramSocket socket, InetAddress senderIp, int port, int id, int maxId) {
         this.sendSocket = socket;
         this.senderIp = senderIp;
         this.senderPort = port;
@@ -37,22 +39,26 @@ public class MyTestRouter {
         sendQueues.add(new LinkedList<MyPacket>());
         sendQueues.add(new LinkedList<MyPacket>());
         broadCastPackets = new LinkedList<>();
+        locationPackets = new LinkedList<>();
+        receivedPackets = new HashMap<>();
+        timeoutWatcher.start();
     }
 
     /**
      * Enqueue packet
      * if packet does not exist, add it
      * if packet exists, remove the old one and add the new one
+     *
      * @param packet
      */
-    private void enqueuePacket(MyPacket packet){
+    private void enqueuePacket(MyPacket packet) {
         int priority = packet.getPrioriry();
         synchronized (lockObj) {
             LinkedList<MyPacket> queue = sendQueues.get(priority);
             if (queue.contains(packet)) {
                 int index = queue.indexOf(packet);
                 MyPacket packetInQueue = queue.get(index);
-                if(packet.isNewerThan(packetInQueue)) {
+                if (packet.isNewerThan(packetInQueue)) {
                     queue.remove(packetInQueue);
                     queue.add(index, packet);
                 }
@@ -65,26 +71,47 @@ public class MyTestRouter {
     }
 
     /**
-     *
      * @param packet
      * @return true if packet is for selfId device
-     *         false if packet is for others or time sync
+     * false if packet is for others or time sync
      */
-    public boolean handleReceivedPacket(MyPacket packet) {
-        if(packet.getPrioriry() == MyPacket.PACKET_TIME_SYNC) {
+    boolean handleReceivedPacket(MyPacket packet) {
+        if (packet.getPrioriry() == MyPacket.PACKET_TIME_SYNC) {
             startTimeSync();
             return false;
         }
-        if(packet.getDestId() != 0) {
+
+        if (packet.isNullMessage()){
+            //location packet
+            if(locationPackets.contains(packet)) {
+                MyPacket packetInList = locationPackets.get(locationPackets.indexOf(packet));
+                if(!packet.isNewerThan(packetInList)) {
+                    return false;
+                } else {
+                    enqueuePacket(packet);
+                    return true;
+                }
+            } else {
+                enqueuePacket(packet);
+                return true;
+            }
+        }
+        //message != null
+        if (!packet.isNullMessage() && receivedPackets.containsKey(packet)) {
+            return false;
+        } else {
+            receivedPackets.put(packet, System.currentTimeMillis());
+        }
+        if (packet.getDestId() != 0) {
             if (packet.getDestId() == this.selfId) return true;
             enqueuePacket(packet);
             return false;
         } else {
             //broadcast
-            if(broadCastPackets.contains(packet)) return false;
+            if (broadCastPackets.contains(packet)) return false;
             broadCastPackets.add(packet);
             enqueuePacket(packet);
-            if(broadCastPackets.size() > 16) {
+            if (broadCastPackets.size() > 16) {
                 broadCastPackets.remove(0);
             }
             return true;
@@ -94,16 +121,30 @@ public class MyTestRouter {
 
     /**
      * wrap the private method
+     *
      * @param packet
      */
-    public void pendingPacket(MyPacket packet) {
+    void pendingPacket(MyPacket packet) {
         enqueuePacket(packet);
     }
+
+    private final Thread timeoutWatcher = new Thread() {
+        @Override
+        public void run() {
+            while (!interrupted()) {
+                if (receivedPackets == null || receivedPackets.size() == 0) continue;
+                for (MyPacket key : receivedPackets.keySet()) {
+                    if (receivedPackets.get(key) - System.currentTimeMillis() > 10 * 60 * 1000)
+                        receivedPackets.remove(key);
+                }
+            }
+        }
+    };
 
     /**
      * send task, send packet from the queue with a higher priority
      */
-    TimerTask sendTask = new TimerTask() {
+    private TimerTask sendTask = new TimerTask() {
         @Override
         public void run() {
             synchronized (lockObj) {
@@ -128,8 +169,9 @@ public class MyTestRouter {
 
     /**
      * use the socket send the packet
+     *
      * @param packet
-     * @return
+     * @return if send success
      */
     private boolean sendPacket(MyPacket packet) {
         try {
@@ -144,10 +186,11 @@ public class MyTestRouter {
 
     /**
      * raise the time sync command
+     *
      * @param packet
      */
-    public void startTimeSync(MyPacket packet) {
-        if(sendPacket(packet)){
+    void startTimeSync(MyPacket packet) {
+        if (sendPacket(packet)) {
             startTimeSync();
         }
     }
@@ -164,7 +207,7 @@ public class MyTestRouter {
     }
 
     void stop() {
-        if(timer != null)
+        if (timer != null)
             timer.cancel();
     }
 
